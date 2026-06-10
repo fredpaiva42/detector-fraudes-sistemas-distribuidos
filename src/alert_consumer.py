@@ -55,6 +55,9 @@ def run_alert_consumer():
 
             try:
                 alert = json.loads(msg.value().decode("utf-8"))
+                if "error" in alert:
+                    print(f"{RED}[ERRO]{RESET} {alert.get('error', 'desconhecido')}")
+                    continue
                 print(format_alert(alert))
             except json.JSONDecodeError:
                 print(f"Mensagem inválida: {msg.value()}")

@@ -29,10 +29,18 @@ def test_encode_card_brand():
     assert encode_card_brand("Elo") == 2
 
 
+def test_encode_card_brand_unknown():
+    assert encode_card_brand("Amex") == -1
+
+
 def test_encode_merchant_category():
     enc = encode_merchant_category("electronics")
     assert isinstance(enc, int)
     assert enc >= 0
+
+
+def test_encode_merchant_category_unknown():
+    assert encode_merchant_category("crypto") == -1
 
 
 def test_calculate_features_returns_8_values():

@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 from haversine import haversine
 
 MERCHANT_CATEGORIES = ["electronics", "grocery", "restaurant", "travel", "clothing", "fuel", "pharmacy"]
+CARD_BRAND_MAPPING = {"Visa": 0, "Mastercard": 1, "Elo": 2}
+UNKNOWN_ENCODING = -1
 
 
 def calculate_distance(lat1, lon1, lat2, lon2):
@@ -13,12 +15,15 @@ def encode_card_type(card_type):
 
 
 def encode_card_brand(card_brand):
-    mapping = {"Visa": 0, "Mastercard": 1, "Elo": 2}
-    return mapping.get(card_brand, 0)
+    if card_brand not in CARD_BRAND_MAPPING:
+        return UNKNOWN_ENCODING
+    return CARD_BRAND_MAPPING[card_brand]
 
 
 def encode_merchant_category(category):
-    return MERCHANT_CATEGORIES.index(category) if category in MERCHANT_CATEGORIES else 0
+    if category not in MERCHANT_CATEGORIES:
+        return UNKNOWN_ENCODING
+    return MERCHANT_CATEGORIES.index(category)
 
 
 def parse_timestamp(ts_str):

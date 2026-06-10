@@ -20,7 +20,7 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -31,14 +31,30 @@ services:
     networks:
       - fraud-net
 
+  topic-init:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic transacoes-raw --partitions 3 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic alertas-fraude --partitions 3 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic alertas-fraude-dlq --partitions 1 --replication-factor 1
+        echo "Tópicos criados com sucesso"
+    networks:
+      - fraud-net
+
   producer:
     build: .
     command: uv run python -m src.producer
     depends_on:
-      kafka:
-        condition: service_healthy
+      topic-init:
+        condition: service_completed_successfully
     environment:
       PYTHONPATH: /app
+      KAFKA_BROKER: kafka:9092
     networks:
       - fraud-net
 
@@ -46,12 +62,15 @@ services:
     build: .
     command: uv run python -m src.flink_processor
     depends_on:
-      kafka:
-        condition: service_healthy
+      topic-init:
+        condition: service_completed_successfully
     environment:
       PYTHONPATH: /app
+      KAFKA_BROKER: kafka:9092
       MODEL_PATH: /app/models/fraud_model.joblib
       FLINK_JAR_DIR: /opt/flink/usrlib
+      FLINK_PARALLELISM: "3"
+      FRAUD_CONFIDENCE_THRESHOLD: "0.7"
     volumes:
       - ./models:/app/models
     networks:
@@ -61,10 +80,11 @@ services:
     build: .
     command: uv run python -m src.alert_consumer
     depends_on:
-      kafka:
-        condition: service_healthy
+      topic-init:
+        condition: service_completed_successfully
     environment:
       PYTHONPATH: /app
+      KAFKA_BROKER: kafka:9092
     networks:
       - fraud-net
 
