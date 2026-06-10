@@ -6,3 +6,4 @@ models/*.joblib
 .env
 jars/
 jars/
+docs/superpowers/
