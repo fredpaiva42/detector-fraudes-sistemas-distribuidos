@@ -42,26 +42,28 @@ class FraudDetector(KeyedProcessFunction):
             ValueStateDescriptor("tx_history", Types.STRING())
         )
 
-    def _build_reasons(self, tx, history, proba_fraud):
+    def _build_reasons(self, tx, history, now, is_fraud):
+        if not is_fraud:
+            return []
         reasons = []
         if tx.get("amount", 0) > 500:
-            reasons.append("high_amount")
+            reasons.append("valor_alto")
         if len(history) > 1:
-            now = parse_timestamp(tx["timestamp"])
             two_min_ago = now - timedelta(minutes=2)
             recent = [h for h in history if parse_timestamp(h["timestamp"]) >= two_min_ago]
             if len(recent) >= 3:
-                reasons.append("rapid_succession")
+                reasons.append("transacoes_rapidas")
         last = max(history, key=lambda h: parse_timestamp(h["timestamp"])) if history else None
         if last is not None:
             dist = calculate_distance(
                 tx["latitude"], tx["longitude"],
                 last["latitude"], last["longitude"],
             )
-            if dist > 100:
-                reasons.append("impossible_distance")
-        if not reasons and proba_fraud > 0.5:
-            reasons.append("model_flagged")
+            minutes_gap = (now - parse_timestamp(last["timestamp"])).total_seconds() / 60
+            if dist > 100 and minutes_gap < 120:
+                reasons.append("deslocamento_impossivel")
+        if not reasons:
+            reasons.append("modelo_suspeito")
         return reasons
 
     def process_element(self, tx_json, ctx):
@@ -84,7 +86,7 @@ class FraudDetector(KeyedProcessFunction):
             proba_fraud = float(proba[1])
             is_fraud = proba_fraud > self.confidence_threshold
 
-            reasons = self._build_reasons(tx, history[:-1], proba_fraud)
+            reasons = self._build_reasons(tx, history[:-1], now, is_fraud)
 
             result = {
                 "transaction_id": tx["transaction_id"],

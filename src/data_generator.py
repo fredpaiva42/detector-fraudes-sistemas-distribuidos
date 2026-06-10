@@ -14,6 +14,8 @@ LOCATIONS = [
     (-3.7172, -38.5433),   # Fortaleza
 ]
 
+_card_home_locations = {card_id: random.choice(LOCATIONS) for card_id in CARD_IDS}
+
 
 def generate_transaction(card_id=None, timestamp=None, is_fraud=False):
     if card_id is None:
@@ -21,16 +23,16 @@ def generate_transaction(card_id=None, timestamp=None, is_fraud=False):
     if timestamp is None:
         timestamp = datetime.now(timezone.utc)
 
-    base_location = random.choice(LOCATIONS)
-
     if is_fraud:
+        base_location = random.choice(LOCATIONS)
         amount = round(random.uniform(500, 10000), 2)
         lat_offset = random.uniform(-20, 20)
         lon_offset = random.uniform(-20, 20)
     else:
+        base_location = _card_home_locations[card_id]
         amount = round(random.uniform(10, 500), 2)
-        lat_offset = random.uniform(-0.1, 0.1)
-        lon_offset = random.uniform(-0.1, 0.1)
+        lat_offset = random.uniform(-0.05, 0.05)
+        lon_offset = random.uniform(-0.05, 0.05)
 
     return {
         "transaction_id": str(uuid.uuid4()),
