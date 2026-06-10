@@ -2,34 +2,51 @@ import json
 from confluent_kafka import Consumer
 from src.kafka_config import KAFKA_BROKER, TOPIC_ALERTS
 
-GREEN = "\033[92m"
 RED = "\033[91m"
+GREEN = "\033[92m"
 YELLOW = "\033[93m"
-RESET = "\033[0m"
+CYAN = "\033[96m"
 BOLD = "\033[1m"
+DIM = "\033[2m"
+RESET = "\033[0m"
+
+
+REASON_LABELS = {
+    "valor_alto": "valor alto",
+    "transacoes_rapidas": "transacoes rapidas",
+    "deslocamento_impossivel": "deslocamento impossivel",
+    "modelo_suspeito": "modelo suspeito",
+}
 
 
 def format_alert(alert):
-    if alert.get("is_fraud"):
-        color = RED
-        status = "FRAUDE"
-    else:
-        color = GREEN
-        status = "APROVADO"
-
+    is_fraud = alert.get("is_fraud")
     confidence = alert.get("confidence", 0)
-    reasons = ", ".join(alert.get("reasons", []))
+    amount = alert.get("amount", 0)
 
-    return (
-        f"{color}{BOLD}[{status}]{RESET} "
-        f"Card: {alert.get('card_id', '?')} | "
-        f"Tipo: {alert.get('card_type', '?')} | "
-        f"Bandeira: {alert.get('card_brand', '?')} | "
-        f"Valor: R$ {alert.get('amount', 0):.2f} | "
-        f"Confiança: {confidence:.1%} | "
-        f"Motivos: {reasons or 'nenhum'} | "
-        f"Timestamp: {alert.get('timestamp', '?')}"
-    )
+    if is_fraud:
+        header = f"{RED}{BOLD}  FRAUDE{RESET}"
+    else:
+        header = f"{GREEN}{BOLD}  OK{RESET}"
+
+    reasons = alert.get("reasons", [])
+    if reasons:
+        labels = [REASON_LABELS.get(r, r) for r in reasons]
+        reasons_str = ", ".join(labels)
+    else:
+        reasons_str = ""
+
+    card = alert.get("card_id", "?")
+    card_type = alert.get("card_type", "?")
+    card_brand = alert.get("card_brand", "?")
+    ts = alert.get("timestamp", "?")
+
+    lines = [
+        f"{header}  {CYAN}{card}{RESET}  {DIM}{card_type} {card_brand}{RESET}",
+        f"         R$ {amount:>9,.2f}   conf: {confidence:.0%}   {reasons_str}",
+        f"         {DIM}{ts}{RESET}",
+    ]
+    return "\n".join(lines)
 
 
 def run_alert_consumer():
@@ -42,7 +59,7 @@ def run_alert_consumer():
     consumer.subscribe([TOPIC_ALERTS])
 
     print(f"{YELLOW}Consumer de alertas iniciado. Monitorando {TOPIC_ALERTS}...{RESET}")
-    print("-" * 100)
+    print()
 
     try:
         while True:
@@ -55,9 +72,12 @@ def run_alert_consumer():
 
             try:
                 alert = json.loads(msg.value().decode("utf-8"))
+                if "error" in alert:
+                    print(f"{RED}[ERRO]{RESET} {alert.get('error', 'desconhecido')}")
+                    continue
                 print(format_alert(alert))
             except json.JSONDecodeError:
-                print(f"Mensagem inválida: {msg.value()}")
+                print(f"Mensagem invalida: {msg.value()}")
     except KeyboardInterrupt:
         print("Consumer encerrado.")
     finally:
