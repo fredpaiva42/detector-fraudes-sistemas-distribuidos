@@ -1,0 +1,20 @@
+[project]
+name = "detector-fraudes"
+version = "0.1.0"
+description = "Detecção de fraude em tempo real com Kafka, PyFlink e Random Forest"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "confluent-kafka>=2.3.0",
+    "apache-flink>=1.18.0",
+    "scikit-learn>=1.4.0",
+    "joblib>=1.3.0",
+    "haversine>=2.8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
