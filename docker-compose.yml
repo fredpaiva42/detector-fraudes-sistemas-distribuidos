@@ -48,7 +48,7 @@ services:
 
   producer:
     build: .
-    command: python -m src.producer
+    command: uv run python -m src.producer
     depends_on:
       - kafka
     environment:
@@ -58,7 +58,7 @@ services:
 
   flink-processor:
     build: .
-    command: python -m src.flink_processor
+    command: uv run python -m src.flink_processor
     depends_on:
       - kafka
       - flink-jobmanager
@@ -73,7 +73,7 @@ services:
 
   alert-consumer:
     build: .
-    command: python -m src.alert_consumer
+    command: uv run python -m src.alert_consumer
     depends_on:
       - kafka
     environment:
@@ -83,7 +83,7 @@ services:
 
   train-model:
     build: .
-    command: python -m src.train_model
+    command: uv run python -m src.train_model
     volumes:
       - ./models:/app/models
     environment:
