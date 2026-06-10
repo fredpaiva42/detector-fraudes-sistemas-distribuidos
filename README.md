@@ -16,6 +16,15 @@ Producer → Kafka (transacoes-raw) → PyFlink (stateful + ML) → Kafka (alert
 - Stateful processing built-in com fault-tolerance via checkpoints
 - Mais moderno e acadêmico que Spark Streaming para stream processing
 
+### Integração PyFlink + Kafka: notas técnicas
+
+O conector Kafka do Flink mudou significativamente entre versões. O `FlinkKafkaConsumer` (legacy) foi removido no conector 3.x+, substituído pela nova API `KafkaSource`/`KafkaSink`. Para o PyFlink 2.2.1 (Flink 2.2), é necessário:
+
+- **Conector JAR correto**: `flink-connector-kafka-5.0.0-2.2.jar` (a antiga artifact `_2.12` não existe mais)
+- **JARs adicionais**: `kafka-clients-3.7.2.jar` e `flink-connector-base-2.2.1.jar`
+- **Carregar JARs via `env.add_jars()`**: o método `Configuration.set_string("pipeline.jars", ...)` não carrega os JARs no classloader da JVM; `add_jars()` faz ambos
+- **Paralelismo 1**: para Kafka de nó único, o paralelismo padrão (20) sobrecarrega o broker
+
 ### Por que Docker Compose?
 - Reprodutibilidade: `docker compose up` levanta o sistema inteiro
 - Qualquer colega ou professor consegue rodar sem configurar ambiente
