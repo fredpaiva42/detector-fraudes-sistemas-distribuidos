@@ -119,6 +119,12 @@ docker compose down
 # Instalar dependências
 uv sync
 
+# Baixar JARs do conector Kafka (necessário para rodar o Flink localmente)
+mkdir -p jars && \
+  wget -q -O jars/flink-connector-kafka-5.0.0-2.2.jar "https://repo1.maven.org/maven2/org/apache/flink/flink-connector-kafka/5.0.0-2.2/flink-connector-kafka-5.0.0-2.2.jar" && \
+  wget -q -O jars/kafka-clients-3.7.2.jar "https://repo1.maven.org/maven2/org/apache/kafka/kafka-clients/3.7.2/kafka-clients-3.7.2.jar" && \
+  wget -q -O jars/flink-connector-base-2.2.1.jar "https://repo1.maven.org/maven2/org/apache/flink/flink-connector-base/2.2.1/flink-connector-base-2.2.1.jar"
+
 # Treinar modelo
 uv run python -m src.train_model
 
@@ -137,7 +143,7 @@ uv run python -m src.alert_consumer
 | `FLINK_PARALLELISM` | `3` | Paralelismo do Flink (deve corresponder ao nº de partições) |
 | `FRAUD_CONFIDENCE_THRESHOLD` | `0.7` | Threshold de confiança para classificar fraude |
 | `MODEL_PATH` | `models/fraud_model.joblib` | Caminho do modelo treinado |
-| `FLINK_JAR_DIR` | `jars/` | Diretório com JARs do conector Kafka |
+| `FLINK_JAR_DIR` | `/opt/flink/usrlib` | Diretório com JARs do conector Kafka (fallback local: `jars/`) |
 | `TOPIC_PARTITIONS` | `3` | Número de partições ao criar tópicos |
 | `TOPIC_REPLICATION_FACTOR` | `1` | Fator de replicação (1 para single-node) |
 
@@ -162,7 +168,7 @@ tests/
 models/
 └── fraud_model.joblib      # Modelo treinado
 
-jars/
+jars/                        # Apenas para dev local (não commitado)
 ├── flink-connector-kafka-5.0.0-2.2.jar
 ├── flink-connector-base-2.2.1.jar
 └── kafka-clients-3.7.2.jar

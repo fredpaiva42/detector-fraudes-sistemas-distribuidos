@@ -19,7 +19,6 @@ RUN mkdir -p /opt/flink/usrlib && \
 
 COPY src/ ./src/
 COPY models/ ./models/
-COPY jars/ ./jars/
 
 ENV PYTHONPATH=/app
 ENV MODEL_PATH=/app/models/fraud_model.joblib
