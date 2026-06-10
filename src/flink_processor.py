@@ -1,11 +1,8 @@
 import json
 import os
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from pyflink.datastream import StreamExecutionEnvironment, KeyedProcessFunction, RuntimeContext
-from pyflink.datastream.state import ValueStateDescriptor, MapStateDescriptor
-from pyflink.common import Types
-from pyflink.datastream.connectors.kafka import FlinkKafkaConsumer, FlinkKafkaProducer
-from pyflink.common.serialization import SimpleStringSchema
+from confluent_kafka import Consumer, Producer
 import joblib
 from src.kafka_config import KAFKA_BROKER, TOPIC_TRANSACTIONS, TOPIC_ALERTS
 from src.ml_features import calculate_features
@@ -18,87 +15,91 @@ def parse_timestamp(ts_str):
     return datetime.fromisoformat(ts_str)
 
 
-class FraudDetector(KeyedProcessFunction):
-    def __init__(self, model_path):
-        self.model_path = model_path
-        self.model = None
-        self.tx_history = None
-
-    def open(self, runtime_context: RuntimeContext):
-        self.model = joblib.load(self.model_path)
-        self.tx_history = runtime_context.get_state(
-            ValueStateDescriptor("tx_history", Types.STRING())
-        )
-
-    def process_element(self, tx_json, ctx):
-        try:
-            tx = json.loads(tx_json)
-            history_json = self.tx_history.value()
-            history = json.loads(history_json) if history_json else []
-
-            now = parse_timestamp(tx["timestamp"])
-            ten_min_ago = now - timedelta(minutes=10)
-            history = [h for h in history if parse_timestamp(h["timestamp"]) >= ten_min_ago]
-            history.append(tx)
-
-            self.tx_history.update(json.dumps(history))
-
-            features = calculate_features(tx, history[:-1])
-            prediction = self.model.predict([features])[0]
-            proba = self.model.predict_proba([features])[0]
-
-            is_fraud = bool(prediction == 1 or proba[1] > 0.7)
-            confidence = float(proba[1])
-
-            reasons = []
-            if tx.get("amount", 0) > 500:
-                reasons.append("high_amount")
-            if len(history) > 1:
-                two_min_ago = now - timedelta(minutes=2)
-                recent = [h for h in history if parse_timestamp(h["timestamp"]) >= two_min_ago]
-                if len(recent) >= 3:
-                    reasons.append("rapid_succession")
-            if not reasons and is_fraud:
-                reasons.append("model_flagged")
-
-            result = {
-                "transaction_id": tx["transaction_id"],
-                "card_id": tx["card_id"],
-                "amount": tx["amount"],
-                "timestamp": tx["timestamp"],
-                "card_type": tx.get("card_type", "unknown"),
-                "card_brand": tx.get("card_brand", "unknown"),
-                "is_fraud": is_fraud,
-                "confidence": round(confidence, 4),
-                "reasons": reasons,
-            }
-            yield json.dumps(result)
-        except Exception as e:
-            yield json.dumps({"error": str(e)})
-
-
 def run_flink_processor():
-    env = StreamExecutionEnvironment.get_execution_environment()
-    env.enable_checkpointing(30000)
+    model = joblib.load(MODEL_PATH)
+    tx_history = defaultdict(list)
 
-    kafka_consumer = FlinkKafkaConsumer(
-        topics=TOPIC_TRANSACTIONS,
-        deserialization_schema=SimpleStringSchema(),
-        properties={"bootstrap.servers": KAFKA_BROKER, "group.id": "flink-fraud-processor"},
-    )
+    consumer_conf = {
+        "bootstrap.servers": KAFKA_BROKER,
+        "group.id": "flink-fraud-processor",
+        "auto.offset.reset": "latest",
+    }
+    consumer = Consumer(consumer_conf)
+    consumer.subscribe([TOPIC_TRANSACTIONS])
 
-    kafka_producer = FlinkKafkaProducer(
-        topic=TOPIC_ALERTS,
-        serialization_schema=SimpleStringSchema(),
-        producer_config={"bootstrap.servers": KAFKA_BROKER},
-    )
+    producer_conf = {"bootstrap.servers": KAFKA_BROKER}
+    producer = Producer(producer_conf)
 
-    ds = env.add_source(kafka_consumer)
-    ds = ds.key_by(lambda x: json.loads(x).get("card_id", ""))
-    ds = ds.process(FraudDetector(MODEL_PATH), output_type=Types.STRING())
-    ds.add_sink(kafka_producer)
+    print(f"Processor iniciado. Consumindo de {TOPIC_TRANSACTIONS}, produzindo em {TOPIC_ALERTS}")
 
-    env.execute("Fraud Detector")
+    try:
+        while True:
+            msg = consumer.poll(timeout=1.0)
+            if msg is None:
+                continue
+            if msg.error():
+                print(f"Erro: {msg.error()}")
+                continue
+
+            try:
+                tx = json.loads(msg.value().decode("utf-8"))
+                card_id = tx["card_id"]
+                now = parse_timestamp(tx["timestamp"])
+                ten_min_ago = now - timedelta(minutes=10)
+
+                history = [h for h in tx_history[card_id] if parse_timestamp(h["timestamp"]) >= ten_min_ago]
+                history.append(tx)
+                tx_history[card_id] = history
+
+                features = calculate_features(tx, history[:-1])
+                prediction = model.predict([features])[0]
+                proba = model.predict_proba([features])[0]
+
+                is_fraud = bool(prediction == 1 or proba[1] > 0.7)
+                confidence = float(proba[1])
+
+                reasons = []
+                if tx.get("amount", 0) > 500:
+                    reasons.append("high_amount")
+                if len(history) > 1:
+                    two_min_ago = now - timedelta(minutes=2)
+                    recent = [h for h in history if parse_timestamp(h["timestamp"]) >= two_min_ago]
+                    if len(recent) >= 3:
+                        reasons.append("rapid_succession")
+                if not reasons and is_fraud:
+                    reasons.append("model_flagged")
+
+                result = {
+                    "transaction_id": tx["transaction_id"],
+                    "card_id": card_id,
+                    "amount": tx["amount"],
+                    "timestamp": tx["timestamp"],
+                    "card_type": tx.get("card_type", "unknown"),
+                    "card_brand": tx.get("card_brand", "unknown"),
+                    "is_fraud": is_fraud,
+                    "confidence": round(confidence, 4),
+                    "reasons": reasons,
+                }
+
+                producer.produce(
+                    TOPIC_ALERTS,
+                    key=card_id.encode("utf-8"),
+                    value=json.dumps(result).encode("utf-8"),
+                )
+                producer.poll(0)
+
+                if is_fraud:
+                    print(f"[FRAUDE] Card: {card_id} | R$ {tx['amount']:.2f} | Confiança: {confidence:.1%} | {', '.join(reasons)}")
+                else:
+                    print(f"[OK] Card: {card_id} | R$ {tx['amount']:.2f}")
+
+            except Exception as e:
+                print(f"Erro ao processar: {e}")
+    except KeyboardInterrupt:
+        print("Processor encerrado.")
+    finally:
+        consumer.close()
+        producer.flush(timeout=5)
 
 
 if __name__ == "__main__":

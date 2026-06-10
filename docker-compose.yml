@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -23,29 +21,6 @@ services:
     networks:
       - fraud-net
 
-  flink-jobmanager:
-    image: flink:1.18-java17
-    command: jobmanager
-    ports:
-      - "8081:8081"
-    environment:
-      FLINK_PROPERTIES: |
-        jobmanager.rpc.address: flink-jobmanager
-    networks:
-      - fraud-net
-
-  flink-taskmanager:
-    image: flink:1.18-java17
-    command: taskmanager
-    depends_on:
-      - flink-jobmanager
-    environment:
-      FLINK_PROPERTIES: |
-        jobmanager.rpc.address: flink-jobmanager
-        taskmanager.numberOfTaskSlots: 2
-    networks:
-      - fraud-net
-
   producer:
     build: .
     command: uv run python -m src.producer
@@ -61,8 +36,6 @@ services:
     command: uv run python -m src.flink_processor
     depends_on:
       - kafka
-      - flink-jobmanager
-      - flink-taskmanager
     environment:
       PYTHONPATH: /app
       MODEL_PATH: /app/models/fraud_model.joblib
