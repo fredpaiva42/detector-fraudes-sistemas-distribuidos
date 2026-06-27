@@ -46,7 +46,7 @@ class FraudDetector(KeyedProcessFunction):
         if not is_fraud:
             return []
         reasons = []
-        if tx.get("amount", 0) > 500:
+        if tx.get("amount", 0) > 2000:
             reasons.append("valor_alto")
         if len(history) > 1:
             two_min_ago = now - timedelta(minutes=2)

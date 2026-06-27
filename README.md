@@ -31,7 +31,7 @@ O `flink_processor` consome do Kafka e mantém estado por cartão:
 
 ### Inteligência e Decisão (ML)
 
-Features calculadas em tempo real alimentam um **Random Forest** (`class_weight='balanced'`):
+Features calculadas em tempo real alimentam o modelo que possuiu melhor performance no treinamento entre **KNN**, **XGBoost** e **Random Forest** (`class_weight='balanced'`):
 
 | Feature | Descrição |
 |---------|-----------|
@@ -83,12 +83,12 @@ O conector Kafka do Flink mudou significativamente entre versões. Para PyFlink 
 - Qualquer colega ou professor consegue rodar sem configurar ambiente
 - Isola dependências (Kafka, Zookeeper) do sistema host
 
-### Por que Random Forest?
+### Como é feita a escolha de modelo?
 
-- Robusto a overfitting (ensemble de árvores)
-- `class_weight='balanced'` compensa o desbalanceamento (~10% fraude)
-- Lida bem com features heterogêneas (numéricas + categóricas)
-- Fácil de explicar e justificar na defesa do trabalho
+- É feito um GridSearch em cada modelo, de forma a escolher seus melhores hiperparâmetros
+- Após o fit com os dados de treino, a melhor versão de cada um é salva
+- Modelos fazem a previsão dos dados de teste e são comparados a partir da métrica de F1-Score, que combina em sua fórmula as métricas de Precision e Recall (bem robusta)
+- O que tiver o maior F1-Score é salvo para ser usado na detecção em tempo real
 
 ## Como Rodar
 
@@ -156,7 +156,7 @@ src/
 ├── data_generator.py      # Gerador de transações (cartões com localização estável)
 ├── ml_features.py         # Cálculo de features + encoding + distância haversine
 ├── producer.py            # Publica transações no Kafka (key_by card_id)
-├── train_model.py          # Treina Random Forest (class_weight='balanced')
+├── train_model.py          # Treina os modelos e os compara, salvando o melhor
 ├── flink_processor.py      # Processamento stateful + inferência ML
 └── alert_consumer.py       # Exibe alertas formatados no terminal
 
