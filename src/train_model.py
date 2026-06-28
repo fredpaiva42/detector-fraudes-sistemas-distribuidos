@@ -41,6 +41,7 @@ def train_model(n_samples=10000, model_path="models/fraud_model.joblib"):
     model_knn = KNeighborsClassifier() 
     weight = ['uniform', 'distance']
     n_neigh = [5, 10, 20]
+    print("Realizando Grid Search para o modelo de K-Nearest Neighbors")
     gridSearch_knn = GridSearchCV(estimator=model_knn,param_grid={'weights':weight,'n_neighbors':n_neigh},cv=4)
     gridSearch_knn.fit(X_train,y_train)
     optimal_knn = gridSearch_knn.best_estimator_
@@ -49,6 +50,7 @@ def train_model(n_samples=10000, model_path="models/fraud_model.joblib"):
     n_estim_xgb = [50, 100, 300]
     learn_rate = [0.01, 0.1, 0.3, 0.5]
     max_depth_xgb = [10, 100, 200]
+    print("Realizando Grid Search para o modelo de XGBoost")
     gridSearch_xgb = GridSearchCV(estimator=model_xgb,param_grid={'n_estimators':n_estim_xgb,'learning_rate':learn_rate,'max_depth':max_depth_xgb},cv=4)
     gridSearch_xgb.fit(X_train,y_train)
     optimal_xgb = gridSearch_xgb.best_estimator_
@@ -58,6 +60,7 @@ def train_model(n_samples=10000, model_path="models/fraud_model.joblib"):
     n_estim_rf = [100, 1000]
     max_depth_rf = [80, 100]
     max_feat = [3, 5]
+    print("Realizando Grid Search para o modelo de Random Forest")
     gridSearch_rf = GridSearchCV(estimator=model_rf,param_grid={'n_estimators':n_estim_rf,'max_features':max_feat,'max_depth':max_depth_rf},cv=4)
     gridSearch_rf.fit(X_train,y_train)
     optimal_rf = gridSearch_rf.best_estimator_
